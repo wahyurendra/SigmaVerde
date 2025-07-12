@@ -44,158 +44,163 @@ const validatePassword = () => {
       }
 };
 
-const quickLogin = async (usernameValue, passwordValue = 'password') => {
+const quickLogin = async (usernameValue, passwordValue = 'securepassword') => {
       username.value = usernameValue;
       password.value = passwordValue;
-      await login();
+      // await login();
+      await authStore.login({
+          username: usernameValue,
+          password: passwordValue
+      });
 };
 
-const login = async () => {
-      // Clear previous errors
-      loginError.value = '';
-      usernameError.value = '';
-      passwordError.value = '';
+// const login = async () => {
+//       // Clear previous errors
+//       loginError.value = '';
+//       usernameError.value = '';
+//       passwordError.value = '';
     
-      // Validate inputs
-      validateUsername();
-      validatePassword();
+//       // Validate inputs
+//       validateUsername();
+//       validatePassword();
     
-      if (!isFormValid.value) return;
+//       if (!isFormValid.value) return;
     
-      loading.value = true;
+//       loading.value = true;
     
-      try {
-          console.log('Attempting login with:', {
-              username: username.value.trim(),
-              endpoint: LOGIN_ENDPOINT
-          });
+//       try {
+//           console.log('Attempting login with:', {
+//               username: username.value.trim(),
+//               endpoint: LOGIN_ENDPOINT
+//           });
 
-          const response = await fetch(LOGIN_ENDPOINT, {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json',
-              },
-              body: JSON.stringify({
-                  username: username.value.trim(),
-                  password: password.value
-              })
-          });
+//           const response = await fetch(LOGIN_ENDPOINT, {
+//               method: 'POST',
+//               headers: {
+//                   'Content-Type': 'application/json',
+//                   'Accept': 'application/json',
+//               },
+//               body: JSON.stringify({
+//                   username: username.value.trim(),
+//                   password: password.value
+//               })
+//           });
 
-          console.log('Response status:', response.status);
-          console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+//           console.log('Response status:', response.status);
+//           console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
-          // Get response text first to handle potential JSON parsing issues
-          const responseText = await response.text();
-          console.log('Raw response:', responseText);
+//           // Get response text first to handle potential JSON parsing issues
+//           const responseText = await response.text();
+//           console.log('Raw response:', responseText);
 
-          let data;
-          try {
-              data = JSON.parse(responseText);
-          } catch (parseError) {
-              console.error('JSON parsing error:', parseError);
-              throw new Error('Invalid JSON response from server');
-          }
+//           let data;
+//           try {
+//               data = JSON.parse(responseText);
+//           } catch (parseError) {
+//               console.error('JSON parsing error:', parseError);
+//               throw new Error('Invalid JSON response from server');
+//           }
 
-          console.log('Parsed response data:', data);
+//           console.log('Parsed response data:', data);
 
-          // Check if response is ok (status 200-299)
-          if (!response.ok) {
-              console.error('HTTP error:', response.status, data);
+//           // Check if response is ok (status 200-299)
+//           if (!response.ok) {
+//               console.error('HTTP error:', response.status, data);
             
-              // Handle specific error messages from API
-              if (data && data.message) {
-                  loginError.value = data.message;
-              } else {
-                  loginError.value = `Server error (${response.status}). Please try again.`;
-              }
-              return;
-          }
+//               // Handle specific error messages from API
+//               if (data && data.message) {
+//                   loginError.value = data.message;
+//               } else {
+//                   loginError.value = `Server error (${response.status}). Please try again.`;
+//               }
+//               return;
+//           }
 
-          // Check if login was successful
-          if (data.success === true) {
-              console.log('Login successful, processing user data:', data);
+//           // Check if login was successful
+//           if (data.success === true) {
+//               console.log('Login successful, processing user data:', data);
             
-              // Validate required fields in response
-              if (!data.token) {
-                  throw new Error('No token received from server');
-              }
+//               // Validate required fields in response
+//               if (!data.token) {
+//                   throw new Error('No token received from server');
+//               }
             
-              if (!data.user || !data.user.id || !data.user.username || !data.user.role) {
-                  throw new Error('Incomplete user data received from server');
-              }
+//               if (!data.user || !data.user.id || !data.user.username || !data.user.role) {
+//                   throw new Error('Incomplete user data received from server');
+//               }
 
-              try {
-                  // Store user data and token in auth store
-                  console.log('Storing auth data:', {
-                      token: data.token,
-                      user: data.user
-                  });
+//               try {
+//                   // Store user data and token in auth store
+//                   console.log('Storing auth data:', {
+//                       token: data.token,
+//                       user: data.user
+//                   });
                 
-                  await authStore.login({
-                      success: data.success,
-                      token: data.token,
-                      user: {
-                          id: data.user.id,
-                          username: data.user.username,
-                          role: data.user.role,
-                          permissions: data.user.permissions || []
-                      }
-                  });
+//                   // await authStore.login({
+//                   //     success: data.success,
+//                   //     token: data.token,
+//                   //     user: {
+//                   //         id: data.user.id,
+//                   //         username: data.user.username,
+//                   //         role: data.user.role,
+//                   //         permissions: data.user.permissions || []
+//                   //     }
+//                   // });
+//                   await authStore.login(data);
                 
-                  // Verify auth store was updated
-                  console.log('Auth store state after login:', {
-                      isAuthenticated: authStore.isAuthenticated,
-                      user: authStore.user,
-                      token: authStore.token ? 'Present' : 'Missing'
-                  });
+//                   // Verify auth store was updated
+//                   console.log('Auth store state after login:', {
+//                       isAuthenticated: authStore.isAuthenticated,
+//                       user: authStore.user,
+//                       token: authStore.token ? 'Present' : 'Missing'
+//                   });
                 
-                  // Clear form
-                  username.value = '';
-                  password.value = '';
+//                   // Clear form
+//                   username.value = '';
+//                   password.value = '';
 
-                  // Get redirect path based on user role
-                  const redirectPath = getDefaultRedirectPath(data.user.role);
-                  console.log('Redirecting to:', redirectPath);
+//                   // Get redirect path based on user role
+//                   const redirectPath = getDefaultRedirectPath(data.user.role);
+//                   console.log('Redirecting to:', redirectPath);
                 
-                  // Small delay to ensure store is fully updated
-                  await new Promise(resolve => setTimeout(resolve, 100));
+//                   // Small delay to ensure store is fully updated
+//                   await new Promise(resolve => setTimeout(resolve, 100));
                 
-                  // Redirect to appropriate page
-                  await router.replace(redirectPath);
+//                   // Redirect to appropriate page
+//                   await router.replace(redirectPath);
                 
-              } catch (authError) {
-                  console.error('Auth store error:', authError);
-                  loginError.value = 'Authentication failed. Please try again.';
-              }
-          } else {
-              // Handle API error response when success is false
-              console.log('Login failed:', data);
-              loginError.value = data.message || 'Invalid username or password';
+//               } catch (authError) {
+//                   console.error('Auth store error:', authError);
+//                   loginError.value = 'Authentication failed. Please try again.';
+//               }
+//           } else {
+//               // Handle API error response when success is false
+//               console.log('Login failed:', data);
+//               loginError.value = data.message || 'Invalid username or password';
             
-              // Handle field-specific errors if provided
-              if (data.errors) {
-                  usernameError.value = data.errors?.username?.[0] || '';
-                  passwordError.value = data.errors?.password?.[0] || '';
-              }
-          }
-      } catch (error) {
-          console.error('Login error:', error);
+//               // Handle field-specific errors if provided
+//               if (data.errors) {
+//                   usernameError.value = data.errors?.username?.[0] || '';
+//                   passwordError.value = data.errors?.password?.[0] || '';
+//               }
+//           }
+//       } catch (error) {
+//           console.error('Login error:', error);
         
-          // Handle different types of errors
-          if (error.name === 'TypeError' && error.message.includes('fetch')) {
-              loginError.value = 'Unable to connect to server. Please check your connection.';
-          } else if (error.message.includes('JSON')) {
-              loginError.value = 'Invalid response from server. Please try again.';
-          } else if (error.message.includes('token') || error.message.includes('user data')) {
-              loginError.value = error.message;
-          } else {
-              loginError.value = 'Login failed. Please try again.';
-          }
-      } finally {
-          loading.value = false;
-      }
-};
+//           // Handle different types of errors
+//           if (error.name === 'TypeError' && error.message.includes('fetch')) {
+//               loginError.value = 'Unable to connect to server. Please check your connection.';
+//           } else if (error.message.includes('JSON')) {
+//               loginError.value = 'Invalid response from server. Please try again.';
+//           } else if (error.message.includes('token') || error.message.includes('user data')) {
+//               loginError.value = error.message;
+//           } else {
+//               loginError.value = 'Login failed. Please try again.';
+//           }
+//       } finally {
+//           loading.value = false;
+//       }
+// };
 
 const getDefaultRedirectPath = (role) => {
       const roleRoutes = {
@@ -322,7 +327,67 @@ const createRippleEffect = () => {
 
 // Form submission
 const handleSubmit = async () => {
-    await login();
+    // Clear previous errors
+    loginError.value = '';
+    usernameError.value = '';
+    passwordError.value = '';
+    
+    // Validate inputs
+    validateUsername();
+    validatePassword();
+    
+    if (!isFormValid.value) return;
+    
+    loading.value = true;
+    
+    try {
+        console.log('Attempting login with:', {
+            username: username.value.trim(),
+            password: password.value ? '***' : 'empty' // Don't log actual password
+        });
+
+        // Call auth store login with username and password
+        await authStore.login({
+            username: username.value,
+            password: password.value,
+        });
+
+        // Clear form on successful login
+        username.value = '';
+        password.value = '';
+
+        // Get redirect path based on user role (if available from auth store)
+        const userRole = authStore.user?.role;
+        const redirectPath = getDefaultRedirectPath(userRole || 'user');
+        
+        console.log('Login successful, redirecting to:', redirectPath);
+        
+        // Small delay to ensure store is fully updated
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Redirect to appropriate page
+        await router.replace(redirectPath);
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        
+        // Handle different types of errors
+        if (error.message) {
+            loginError.value = error.message;
+        } else if (error.response?.data?.message) {
+            loginError.value = error.response.data.message;
+        } else {
+            loginError.value = 'Login failed. Please try again.';
+        }
+        
+        // Handle field-specific errors if provided
+        if (error.response?.data?.errors) {
+            usernameError.value = error.response.data.errors?.username?.[0] || '';
+            passwordError.value = error.response.data.errors?.password?.[0] || '';
+        }
+    } finally {
+        loading.value = false;
+    }
 };
 
 // Social login handlers (if needed)
@@ -573,13 +638,6 @@ const handleMicrosoftLogin = () => {
             'text-white': !isDarkTheme
           }">
             🔒 Your information is secure and encrypted
-          </p>
-        </div>
-
-        <!-- API Status Indicator -->
-        <div class="mt-2 text-center">
-          <p class="text-xs text-surface-400">
-            API: {{ API_BASE_URL }}
           </p>
         </div>
       </div>
