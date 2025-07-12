@@ -52,6 +52,14 @@
                                     @click="showCreateDialog = true"
                                     class="primary-action-btn"
                                     v-if="authStore.hasPermission('write')" />
+                                
+                                <Button 
+                                    icon="pi pi-refresh" 
+                                    label="Refresh" 
+                                    @click="fetchAnomalies"
+                                    :loading="loading"
+                                    class="p-button-outlined"
+                                    v-tooltip.top="'Refresh anomaly data'" />
                             </div>
                             
                             <div class="user-info" v-if="authStore.user">
@@ -83,7 +91,8 @@
                                     icon="pi pi-download" 
                                     label="Export Cases" 
                                     class="p-button-text quick-action-item"
-                                    size="small" />
+                                    size="small"
+                                    @click="exportCases" />
                                 <Button 
                                     icon="pi pi-filter" 
                                     label="Advanced Filter" 
@@ -96,6 +105,21 @@
                                     size="small" />
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- API Status Indicator -->
+                <div v-if="apiError" class="api-error-banner p-3 mb-4 border-round" 
+                     style="background: var(--red-50); border: 1px solid var(--red-200); color: var(--red-700);">
+                    <div class="flex align-items-center gap-2">
+                        <i class="pi pi-exclamation-triangle"></i>
+                        <span class="font-medium">API Connection Error:</span>
+                        <span>{{ apiError }}</span>
+                        <Button 
+                            icon="pi pi-refresh" 
+                            label="Retry" 
+                            class="p-button-sm p-button-text p-button-danger ml-auto"
+                            @click="fetchAnomalies" />
                     </div>
                 </div>
 
@@ -158,6 +182,15 @@
                                       showClear />
                         </div>
                         <div class="filter-group">
+                            <label class="block text-600 font-medium mb-2">Crypto</label>
+                            <Dropdown v-model="selectedCrypto" 
+                                      :options="cryptoOptions" 
+                                      optionLabel="label" 
+                                      placeholder="All Cryptos" 
+                                      class="w-12rem" 
+                                      showClear />
+                        </div>
+                        <div class="filter-group">
                             <label class="block text-600 font-medium mb-2">Date Range</label>
                             <Calendar v-model="dateRange" 
                                       selectionMode="range" 
@@ -169,7 +202,7 @@
                         <div class="filter-group flex-1">
                             <label class="block text-600 font-medium mb-2">Search</label>
                             <InputText v-model="searchTerm" 
-                                       placeholder="Search cases..." 
+                                       placeholder="Search cases, wallets..." 
                                        class="w-full"
                                        icon="pi pi-search" />
                         </div>
@@ -205,11 +238,33 @@
                             </template>
                         </Column>
 
-                        <Column field="title" header="Title" :sortable="true" headerClass="font-bold">
+                        <Column field="wallet" header="Wallet Address" :sortable="true" headerClass="font-bold">
                             <template #body="slotProps">
-                                <div class="case-title-cell">
-                                    <div class="font-medium text-900 mb-1">{{ slotProps.data.title }}</div>
-                                    <div class="text-600 text-sm line-height-3">{{ slotProps.data.description }}</div>
+                                <div class="wallet-cell">
+                                    <div class="font-mono text-sm">
+                                        {{ formatWalletAddress(slotProps.data.wallet) }}
+                                    </div>
+                                    <Button 
+                                        icon="pi pi-copy" 
+                                        class="p-button-text p-button-sm"
+                                        @click="copyToClipboard(slotProps.data.wallet)"
+                                        v-tooltip.top="'Copy wallet address'" />
+                                </div>
+                            </template>
+                        </Column>
+
+                        <Column field="crypto" header="Crypto" :sortable="true" headerClass="font-bold">
+                            <template #body="slotProps">
+                                <Tag :value="slotProps.data.crypto"
+                                     :severity="getCryptoSeverity(slotProps.data.crypto)"
+                                     class="font-medium" />
+                            </template>
+                        </Column>
+
+                        <Column field="amount" header="Amount" :sortable="true" headerClass="font-bold">
+                            <template #body="slotProps">
+                                <div class="amount-cell">
+                                    <div class="font-bold text-900">{{ slotProps.data.amount }}</div>
                                 </div>
                             </template>
                         </Column>
@@ -224,7 +279,7 @@
 
                         <Column field="status" header="Status" :sortable="true" headerClass="font-bold">
                             <template #body="slotProps">
-                                <Tag :value="slotProps.data.status"
+                                <Tag :value="getStatusLabel(slotProps.data.status)"
                                      :severity="getStatusSeverity(slotProps.data.status)"
                                      class="font-medium" />
                             </template>
@@ -302,12 +357,27 @@
                             <div class="flex-1">
                                 <h5 class="m-0 text-2xl font-bold text-900">{{ selectedCase.title }}</h5>
                                 <p class="text-600 mt-2 mb-0 line-height-3">{{ selectedCase.description }}</p>
+                                <div class="mt-3 p-3 surface-ground border-round">
+                                    <div class="grid">
+                                        <div class="col-12 md:col-6">
+                                            <label class="block text-600 font-medium mb-1">Wallet Address</label>
+                                            <div class="font-mono text-sm">{{ selectedCase.wallet }}</div>
+                                        </div>
+                                        <div class="col-12 md:col-6">
+                                            <label class="block text-600 font-medium mb-1">Amount</label>
+                                            <div class="font-bold text-900">{{ selectedCase.amount }}</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div class="flex gap-2 flex-wrap">
+                                <Tag :value="selectedCase.crypto"
+                                     :severity="getCryptoSeverity(selectedCase.crypto)"
+                                     class="font-medium" />
                                 <Tag :value="selectedCase.level"
                                      :severity="getLevelSeverity(selectedCase.level)"
                                      class="font-medium" />
-                                <Tag :value="selectedCase.status"
+                                <Tag :value="getStatusLabel(selectedCase.status)"
                                      :severity="getStatusSeverity(selectedCase.status)"
                                      class="font-medium" />
                                 <Tag :value="selectedCase.priority"
@@ -472,7 +542,7 @@
 <script setup>
 import router from '@/router';
 import { useAuthStore } from '@/stores/auth';
-import { useCaseStore } from '@/stores/cases';
+import { amlCaseService } from '@/services/AMLCaseService';
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
 import Calendar from 'primevue/calendar';
@@ -485,14 +555,15 @@ import TabPanel from 'primevue/tabpanel';
 import TabView from 'primevue/tabview';
 import Tag from 'primevue/tag';
 import Timeline from 'primevue/timeline';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 // Auth store
 const authStore = useAuthStore();
 
 // Reactive State
-const caseStore = useCaseStore();
 const loading = ref(false);
+const apiError = ref(null);
+const cases = ref([]);
 const selectedCases = ref([]);
 const selectedCase = ref(null);
 const showCaseDialog = ref(false);
@@ -502,16 +573,17 @@ const searchTerm = ref('');
 const selectedLevel = ref(null);
 const selectedStatus = ref(null);
 const selectedPriority = ref(null);
+const selectedCrypto = ref(null);
 const dateRange = ref(null);
 const newNote = ref('');
 const unreadNotifications = ref([]);
 
 // Case Statistics
 const caseStats = computed(() => ({
-    pendingL1: caseStore.cases.filter(c => c.level === 'L1' && c.status !== 'approved').length,
-    pendingL2: caseStore.cases.filter(c => c.level === 'L2' && c.status !== 'approved').length,
-    anomalies: caseStore.cases.filter(c => c.priority === 'high').length,
-    blacklisted: caseStore.cases.filter(c => c.status === 'rejected').length
+    pendingL1: cases.value.filter(c => c.level === 'L1' && c.status !== 'approved').length,
+    pendingL2: cases.value.filter(c => c.level === 'L2' && c.status !== 'approved').length,
+    anomalies: cases.value.filter(c => c.priority === 'high').length,
+    blacklisted: cases.value.filter(c => c.status === 'rejected').length
 }));
 
 // Options
@@ -535,10 +607,15 @@ const priorityOptions = [
     { label: 'Low', value: 'low' }
 ];
 
+const cryptoOptions = computed(() => {
+    const cryptos = [...new Set(cases.value.map(c => c.crypto))];
+    return cryptos.map(crypto => ({ label: crypto, value: crypto }));
+});
+
 // Computed
 const filteredCases = computed(() => {
     // First filter by user role
-    let filtered = [...caseStore.cases].filter(case_ => {
+    let filtered = [...cases.value].filter(case_ => {
         if (authStore.isAdmin) {
             return true; // Admin sees all cases
         } else if (authStore.isL2Analyst) {
@@ -562,12 +639,17 @@ const filteredCases = computed(() => {
         filtered = filtered.filter(case_ => case_.priority === selectedPriority.value.value);
     }
 
+    if (selectedCrypto.value) {
+        filtered = filtered.filter(case_ => case_.crypto === selectedCrypto.value.value);
+    }
+
     if (searchTerm.value) {
         const term = searchTerm.value.toLowerCase();
         filtered = filtered.filter(case_ => 
             case_.id.toLowerCase().includes(term) ||
             case_.title?.toLowerCase().includes(term) ||
-            case_.description?.toLowerCase().includes(term)
+            case_.description?.toLowerCase().includes(term) ||
+            case_.wallet?.toLowerCase().includes(term)
         );
     }
 
@@ -575,7 +657,7 @@ const filteredCases = computed(() => {
         const startDate = dateRange.value[0];
         const endDate = dateRange.value[1];
         filtered = filtered.filter(case_ => {
-            const caseDate = new Date(case_.date);
+            const caseDate = new Date(case_.createdAt);
             return caseDate >= startDate && caseDate <= endDate;
         });
     }
@@ -584,9 +666,26 @@ const filteredCases = computed(() => {
 });
 
 // Methods
+const fetchAnomalies = async () => {
+    loading.value = true;
+    apiError.value = null;
+    
+    try {
+        console.log('Fetching anomalies from API...');
+        const anomalies = await amlCaseService.getAnomalies();
+        cases.value = anomalies;
+        console.log(`Loaded ${anomalies.length} cases from API`);
+    } catch (error) {
+        console.error('Error fetching anomalies:', error);
+        apiError.value = error.message;
+    } finally {
+        loading.value = false;
+    }
+};
+
 const viewCase = (case_) => {
     selectedCase.value = case_;
-    router.push(`/monitoring/cases/${selectedCase.value.id}`);
+    showCaseDialog.value = true;
 };
 
 const escalateCase = async (case_) => {
@@ -600,18 +699,25 @@ const escalateCase = async (case_) => {
                 {
                     timestamp: new Date(),
                     action: 'Case Escalated to L2',
-                    user: 'Current User',
+                    user: authStore.user?.name || 'Current User',
                     comment: 'Escalated for further review'
                 }
             ]
         };
 
-        caseStore.updateCase(case_.id, updatedCase);
+        await amlCaseService.updateCase(case_.id, updatedCase);
+        
+        // Update local case
+        const index = cases.value.findIndex(c => c.id === case_.id);
+        if (index !== -1) {
+            cases.value[index] = updatedCase;
+        }
         
         // Send notifications
         await sendNotifications(case_, 'escalation');
     } catch (error) {
         console.error('Error escalating case:', error);
+        apiError.value = 'Failed to escalate case';
     }
 };
 
@@ -625,18 +731,25 @@ const approveCase = async (case_) => {
                 {
                     timestamp: new Date(),
                     action: 'Case Approved',
-                    user: 'Current User',
+                    user: authStore.user?.name || 'Current User',
                     comment: 'All requirements met'
                 }
             ]
         };
 
-        caseStore.updateCase(case_.id, updatedCase);
+        await amlCaseService.updateCase(case_.id, updatedCase);
+        
+        // Update local case
+        const index = cases.value.findIndex(c => c.id === case_.id);
+        if (index !== -1) {
+            cases.value[index] = updatedCase;
+        }
         
         // Send notifications
         await sendNotifications(case_, 'approval');
     } catch (error) {
         console.error('Error approving case:', error);
+        apiError.value = 'Failed to approve case';
     }
 };
 
@@ -645,7 +758,7 @@ const addNote = () => {
         selectedCase.value.notes.push({
             id: Date.now(),
             content: newNote.value,
-            user: 'Current User',
+            user: authStore.user?.name || 'Current User',
             timestamp: new Date()
         });
         newNote.value = '';
@@ -662,6 +775,34 @@ const sendNotifications = async (case_, type) => {
     });
 };
 
+const exportCases = () => {
+    try {
+        const csvData = amlCaseService.exportCases(filteredCases.value);
+        const blob = new Blob([csvData], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `aml-cases-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error('Error exporting cases:', error);
+        apiError.value = 'Failed to export cases';
+    }
+};
+
+const copyToClipboard = async (text) => {
+    try {
+        await navigator.clipboard.writeText(text);
+        // You could add a toast notification here
+        console.log('Copied to clipboard:', text);
+    } catch (error) {
+        console.error('Failed to copy to clipboard:', error);
+    }
+};
+
 // Utility functions
 const formatDate = (date) => {
     return new Date(date).toLocaleDateString();
@@ -673,6 +814,11 @@ const formatTime = (date) => {
 
 const formatDateTime = (date) => {
     return new Date(date).toLocaleString();
+};
+
+const formatWalletAddress = (address) => {
+    if (!address) return '';
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
 const getInitials = (name) => {
@@ -710,12 +856,34 @@ const getStatusSeverity = (status) => {
     }
 };
 
+const getStatusLabel = (status) => {
+    const statusLabels = {
+        'new': 'New',
+        'in_review': 'In Review',
+        'pending_docs': 'Pending Documents',
+        'escalated': 'Escalated',
+        'approved': 'Approved',
+        'rejected': 'Rejected'
+    };
+    return statusLabels[status] || status;
+};
+
 const getPrioritySeverity = (priority) => {
     switch (priority) {
         case 'high': return 'danger';
         case 'medium': return 'warning';
         case 'low': return 'info';
         default: return 'info';
+    }
+};
+
+const getCryptoSeverity = (crypto) => {
+    switch (crypto) {
+        case 'BTC': return 'warning';
+        case 'ETH': return 'info';
+        case 'USDT': return 'success';
+        case 'USDC': return 'success';
+        default: return 'secondary';
     }
 };
 
@@ -746,8 +914,24 @@ const canApprove = (case_) => {
     const hasPermission = authStore.hasPermission('approve');
     return hasPermission && case_.status !== 'approved' && case_.status !== 'rejected';
 };
-</script>
 
+// Lifecycle
+onMounted(() => {
+    fetchAnomalies();
+    
+    // Set up auto-refresh every 30 seconds
+    const refreshInterval = setInterval(() => {
+        if (!loading.value) {
+            fetchAnomalies();
+        }
+    }, 30000);
+    
+    // Cleanup on unmount
+    return () => {
+        clearInterval(refreshInterval);
+    };
+});
+</script>
 
 <style scoped>
 /* Page Header Styling */
@@ -993,6 +1177,65 @@ const canApprove = (case_) => {
     color: var(--primary-color);
 }
 
+/* Table Styling */
+.wallet-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.amount-cell {
+    text-align: right;
+}
+
+.date-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.action-btn {
+    transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+    transform: scale(1.1);
+}
+
+/* Filter Section */
+.filter-section {
+    border: 1px solid var(--surface-border);
+}
+
+.filter-group {
+    min-width: 150px;
+}
+
+/* Case Details Dialog */
+.case-details-dialog :deep(.p-dialog-content) {
+    padding: 0;
+}
+
+.case-tabs :deep(.p-tabview-panels) {
+    padding: 1rem 0;
+}
+
+.timeline-content {
+    margin-left: 1rem;
+}
+
+.note-item {
+    border-left: 3px solid var(--primary-color);
+}
+
+.stakeholder-item {
+    transition: all 0.2s ease;
+}
+
+.stakeholder-item:hover {
+    background: var(--surface-hover);
+}
+
 /* Animations */
 @keyframes pulse {
     0% {
@@ -1101,6 +1344,20 @@ const canApprove = (case_) => {
     .quick-action-item :deep(.p-button-label) {
         display: none;
     }
+    
+    .filter-section {
+        padding: 1rem;
+    }
+    
+    .filter-group {
+        min-width: 100%;
+    }
+    
+    .wallet-cell {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
 }
 
 /* Dark Mode Adjustments */
@@ -1115,6 +1372,152 @@ const canApprove = (case_) => {
     
     .primary-action-btn:hover {
         box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2);
+    }
+}
+
+/* Loading States */
+.p-datatable.p-datatable-loading .p-datatable-tbody > tr > td {
+    background: var(--surface-ground);
+}
+
+/* API Error Banner */
+.api-error-banner {
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Stats Cards */
+.stats-card {
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Table Container */
+.table-container {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border);
+}
+
+.case-table :deep(.p-datatable-header) {
+    background: var(--surface-section);
+    border-bottom: 2px solid var(--surface-border);
+}
+
+.case-table :deep(.p-datatable-thead > tr > th) {
+    background: var(--surface-section);
+    color: var(--text-color);
+    font-weight: 600;
+    padding: 1rem;
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.case-table :deep(.p-datatable-tbody > tr) {
+    transition: all 0.2s ease;
+}
+
+.case-table :deep(.p-datatable-tbody > tr:hover) {
+    background: var(--surface-hover);
+}
+
+.case-table :deep(.p-datatable-tbody > tr > td) {
+    padding: 1rem;
+    border-bottom: 1px solid var(--surface-border);
+}
+
+/* Case Title Cell */
+.case-title-cell {
+    max-width: 300px;
+}
+
+.case-title-cell .font-medium {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.case-title-cell .text-600 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Sidebar Content */
+.sidebar-content {
+    position: sticky;
+    top: 2rem;
+}
+
+.info-item {
+    transition: all 0.2s ease;
+}
+
+.info-item:hover {
+    background: var(--surface-hover);
+    padding: 0.5rem;
+    border-radius: 4px;
+    margin: -0.5rem;
+}
+
+/* Custom Timeline */
+.custom-timeline :deep(.p-timeline-event-content) {
+    margin-left: 1rem;
+}
+
+.custom-timeline :deep(.p-timeline-event-marker) {
+    background: var(--primary-color);
+    border: 2px solid var(--surface-card);
+}
+
+.custom-timeline :deep(.p-timeline-event-connector) {
+    background: var(--surface-border);
+}
+
+/* Utility Classes */
+.font-mono {
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.cursor-pointer:hover {
+    text-decoration: underline;
+}
+
+/* Print Styles */
+@media print {
+    .page-header,
+    .quick-actions-bar,
+    .action-buttons,
+    .p-paginator {
+        display: none !important;
+    }
+    
+    .case-table {
+        font-size: 0.8rem;
+    }
+    
+    .case-table :deep(.p-datatable-tbody > tr > td) {
+        padding: 0.5rem;
     }
 }
 </style>

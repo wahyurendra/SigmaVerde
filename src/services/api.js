@@ -172,18 +172,18 @@ class ApiService {
     }
   }
 
-  async getProfile() {
-    console.log('👤 Fetching user profile');
+  // async getProfile() {
+  //   console.log('👤 Fetching user profile');
     
-    try {
-      const result = await this.request('/auth/profile');
-      console.log('✅ Profile fetched successfully');
-      return result;
-    } catch (error) {
-      console.error('❌ Profile fetch failed:', error.message);
-      throw error;
-    }
-  }
+  //   try {
+  //     const result = await this.request('/auth/profile');
+  //     console.log('✅ Profile fetched successfully');
+  //     return result;
+  //   } catch (error) {
+  //     console.error('❌ Profile fetch failed:', error.message);
+  //     throw error;
+  //   }
+  // }
 
   // Health check
   async healthCheck() {
