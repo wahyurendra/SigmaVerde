@@ -1,5 +1,7 @@
 <script setup>
 import { defineEmits, defineProps } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+
 const props = defineProps({
   showQuickActions: {
     type: Boolean,
@@ -8,7 +10,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['toggle', 'export-report', 'navigate'])
-
+const authStore = useAuthStore()
+console.log(authStore);
 const toggleActions = () => {
   emit('toggle')
 }
@@ -47,11 +50,13 @@ const handleNavigate = (route) => {
           <span class="text-sm font-semibold whitespace-nowrap">Generate Report</span>
         </button>
 
+        <!-- Exchanger Case Creation Button -->
         <button
-          key="alert"
+          v-if="authStore.isExchanger"
+          key="exchanger-case"
           class="flex items-center gap-3 bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 group"
-          title="Create Alert Rule"
-          @click="handleNavigate('/monitoring/cases')"
+          title="Create AML Case"
+          @click="handleNavigate('/exchanger/create-case')"
         >
           <div class="p-1 bg-orange-500 rounded-lg">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -59,6 +64,22 @@ const handleNavigate = (route) => {
             </svg>
           </div>
           <span class="text-sm font-semibold whitespace-nowrap">Create Case</span>
+        </button>
+
+        <!-- Analyst Case Management Button -->
+        <button
+          v-else
+          key="alert"
+          class="flex items-center gap-3 bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 group"
+          title="Case Management"
+          @click="handleNavigate('/monitoring/cases')"
+        >
+          <div class="p-1 bg-orange-500 rounded-lg">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+            </svg>
+          </div>
+          <span class="text-sm font-semibold whitespace-nowrap">Manage Cases</span>
         </button>
 
         <button

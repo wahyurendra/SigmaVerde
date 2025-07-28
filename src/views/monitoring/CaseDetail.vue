@@ -1,155 +1,333 @@
 <template>
     <div class="case-detail-container">
-        <!-- Case Header -->
-        <div class="case-header">
-            <div class="case-header-content">
-                <div class="case-title-section">
+        <!-- Modern Header with Glass Effect -->
+        <div class="modern-header">
+            <div class="header-backdrop"></div>
+            <div class="header-content">
+                <!-- Navigation & Title -->
+                <div class="nav-section">
                     <Button 
                         icon="pi pi-arrow-left" 
-                        class="back-button"
+                        class="modern-back-btn"
                         @click="goBack" 
                         severity="secondary"
                         text
                         rounded />
-                    <div class="case-title-info">
-                        <h1 class="case-id">{{ caseData?.id }}</h1>
-                        <p class="case-description">{{ caseData?.details?.description }}</p>
+                    <div class="breadcrumb">
+                        <span class="breadcrumb-item">Cases</span>
+                        <i class="pi pi-chevron-right breadcrumb-separator"></i>
+                        <span class="breadcrumb-current">{{ caseData?.id }}</span>
                     </div>
                 </div>
-                <div class="case-status-tags">
-                    <Tag 
-                        :value="caseData?.level"
-                        :severity="getLevelSeverity(caseData?.level)"
-                        class="status-tag" />
-                    <Tag 
-                        :value="caseData?.status"
-                        :severity="getStatusSeverity(caseData?.status)"
-                        class="status-tag" />
-                    <Tag 
-                        :value="caseData?.riskLevel"
-                        :severity="getRiskSeverity(caseData?.riskLevel)"
-                        class="status-tag" />
+                
+                <!-- Case Title & Meta -->
+                <div class="case-meta-section">
+                    <div class="case-title-group">
+                        <h1 class="modern-case-id">{{ caseData?.id }}</h1>
+                        <p class="case-subtitle">{{ caseData?.details?.description }}</p>
+                    </div>
+                    
+                    <!-- Status Pills -->
+                    <div class="status-pills">
+                        <div class="pill-group">
+                            <span class="pill-label">Level</span>
+                            <Tag 
+                                :value="caseData?.level"
+                                :severity="getLevelSeverity(caseData?.level)"
+                                class="modern-tag" />
+                        </div>
+                        <div class="pill-group">
+                            <span class="pill-label">Status</span>
+                            <Tag 
+                                :value="caseData?.status"
+                                :severity="getStatusSeverity(caseData?.status)"
+                                class="modern-tag" />
+                        </div>
+                        <div class="pill-group">
+                            <span class="pill-label">Risk</span>
+                            <Tag 
+                                :value="caseData?.riskLevel"
+                                :severity="getRiskSeverity(caseData?.riskLevel)"
+                                class="modern-tag" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Bar -->
+                <div class="action-bar">
+                    <div class="action-group primary-actions">
+                        <Button 
+                            icon="pi pi-send"
+                            label="Escalate"
+                            severity="warning"
+                            size="small"
+                            class="action-btn"
+                            @click="escalateCase"
+                            :disabled="!canEscalate"
+                            v-if="authStore.isL1Analyst || authStore.isAdmin" />
+                        <Button 
+                            icon="pi pi-check"
+                            label="Approve"
+                            severity="success"
+                            size="small"
+                            class="action-btn"
+                            @click="approveCase"
+                            :disabled="!canApprove"
+                            v-if="authStore.hasPermission('approve')" />
+                        <Button 
+                            icon="pi pi-times"
+                            label="Reject"
+                            severity="danger"
+                            size="small"
+                            class="action-btn"
+                            @click="rejectCase"
+                            :disabled="!canReject"
+                            v-if="authStore.hasPermission('approve')" />
+                    </div>
+                    <div class="action-group secondary-actions">
+                        <Button 
+                            icon="pi pi-pencil"
+                            severity="secondary"
+                            size="small"
+                            outlined
+                            rounded
+                            v-tooltip.top="'Edit Case'"
+                            @click="editCase"
+                            v-if="authStore.hasPermission('write')" />
+                        <Button 
+                            icon="pi pi-download"
+                            severity="secondary"
+                            size="small"
+                            outlined
+                            rounded
+                            v-tooltip.top="'Export Case'"
+                            @click="exportCase" />
+                        <Button 
+                            icon="pi pi-ellipsis-v"
+                            severity="secondary"
+                            size="small"
+                            outlined
+                            rounded
+                            v-tooltip.top="'More Options'"
+                            @click="showMoreOptions" />
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Quick Actions -->
-            <div class="quick-actions">
-                <Button 
-                    icon="pi pi-send"
-                    label="Escalate to L2"
-                    severity="warning"
-                    size="small"
-                    @click="escalateCase"
-                    :disabled="!canEscalate"
-                    v-if="authStore.isL1Analyst || authStore.isAdmin" />
-                <Button 
-                    icon="pi pi-check"
-                    label="Approve"
-                    severity="success"
-                    size="small"
-                    @click="approveCase"
-                    :disabled="!canApprove"
-                    v-if="authStore.hasPermission('approve')" />
-                <Button 
-                    icon="pi pi-times"
-                    label="Reject"
-                    severity="danger"
-                    size="small"
-                    @click="rejectCase"
-                    :disabled="!canReject"
-                    v-if="authStore.hasPermission('approve')" />
-                <Button 
-                    icon="pi pi-pencil"
-                    label="Edit"
-                    severity="secondary"
-                    size="small"
-                    outlined
-                    @click="editCase"
-                    v-if="authStore.hasPermission('write')" />
+        <!-- Key Metrics Cards -->
+        <div class="metrics-grid">
+            <div class="metric-card crypto-metric">
+                <div class="metric-icon">
+                    <i class="pi pi-bitcoin"></i>
+                </div>
+                <div class="metric-content">
+                    <div class="metric-value">{{ caseData?.crypto }}</div>
+                    <div class="metric-label">Cryptocurrency</div>
+                </div>
+                <div class="metric-trend">
+                    <i class="pi pi-arrow-up trend-icon positive"></i>
+                </div>
             </div>
-
-            <!-- Case Overview Cards -->
-            <div class="overview-cards">
-                <div class="overview-card crypto-card">
-                    <div class="card-icon">
-                        <i class="pi pi-bitcoin"></i>
-                    </div>
-                    <div class="card-content">
-                        <div class="card-value">{{ caseData?.crypto }}</div>
-                        <div class="card-label">Cryptocurrency</div>
-                    </div>
+            
+            <div class="metric-card amount-metric">
+                <div class="metric-icon">
+                    <i class="pi pi-dollar"></i>
                 </div>
-                <div class="overview-card amount-card">
-                    <div class="card-icon">
-                        <i class="pi pi-dollar"></i>
-                    </div>
-                    <div class="card-content">
-                        <div class="card-value">{{ caseData?.amount }}</div>
-                        <div class="card-label">Transaction Amount</div>
-                    </div>
+                <div class="metric-content">
+                    <div class="metric-value">{{ caseData?.amount }}</div>
+                    <div class="metric-label">Transaction Amount</div>
                 </div>
-                <div class="overview-card analyst-card">
-                    <div class="card-icon">
-                        <i class="pi pi-user"></i>
-                    </div>
-                    <div class="card-content">
-                        <div class="card-value">{{ caseData?.details?.assignedTo }}</div>
-                        <div class="card-label">Assigned Analyst</div>
-                    </div>
+                <div class="metric-progress">
+                    <div class="progress-bar" style="width: 75%"></div>
                 </div>
-                <div class="overview-card date-card">
-                    <div class="card-icon">
-                        <i class="pi pi-calendar"></i>
-                    </div>
-                    <div class="card-content">
-                        <div class="card-value">{{ formatDate(caseData?.date) }}</div>
-                        <div class="card-label">Created Date</div>
-                    </div>
+            </div>
+            
+            <div class="metric-card analyst-metric">
+                <div class="metric-icon">
+                    <Avatar 
+                        :label="getInitials(caseData?.details?.assignedTo)"
+                        size="small"
+                        shape="circle"
+                        class="analyst-avatar" />
+                </div>
+                <div class="metric-content">
+                    <div class="metric-value">{{ caseData?.details?.assignedTo }}</div>
+                    <div class="metric-label">Assigned Analyst</div>
+                </div>
+                <div class="metric-status online"></div>
+            </div>
+            
+            <div class="metric-card timeline-metric">
+                <div class="metric-icon">
+                    <i class="pi pi-clock"></i>
+                </div>
+                <div class="metric-content">
+                    <div class="metric-value">{{ getTimeElapsed(caseData?.date) }}</div>
+                    <div class="metric-label">Time Elapsed</div>
+                </div>
+                <div class="metric-urgency">
+                    <span class="urgency-indicator medium"></span>
                 </div>
             </div>
         </div>
 
         <!-- Main Content -->
         <div class="main-content">
-            <!-- Left Column - Case Details -->
-            <div class="content-left">
-                <div class="case-tabs">
-                    <TabView class="custom-tabview">
+            <!-- Primary Content Area -->
+            <div class="content-main">
+                <!-- Enhanced Tabs -->
+                <div class="modern-tabs-container">
+                    <TabView class="modern-tabview">
                         <!-- Case Information Tab -->
-                        <TabPanel header="Case Information">
-                            <div class="tab-content">
-                                <div class="section-header">
-                                    <h3>Transaction Details</h3>
+                        <TabPanel>
+                            <template #header>
+                                <div class="tab-header">
+                                    <i class="pi pi-info-circle"></i>
+                                    <span>Case Information</span>
                                 </div>
-                                <div class="transaction-details">
-                                    <div class="detail-group">
-                                        <div class="detail-item">
-                                            <label>Wallet/Entity</label>
-                                            <div class="detail-value">{{ caseData?.customer }}</div>
+                            </template>
+                            
+                            <div class="tab-panel-content">
+                                <!-- Transaction Details Card -->
+                                <div class="info-card">
+                                    <div class="card-header-modern">
+                                        <div class="header-title">
+                                            <i class="pi pi-exchange"></i>
+                                            <h3>Transaction Details</h3>
                                         </div>
-                                        <div class="detail-item">
-                                            <label>Transaction Hash</label>
-                                            <div class="detail-value hash-value">0x1234567890abcdef...</div>
+                                        <Button 
+                                            icon="pi pi-external-link"
+                                            severity="secondary"
+                                            text
+                                            rounded
+                                            size="small"
+                                            v-tooltip.top="'View on Blockchain'" />
+                                    </div>
+                                    
+                                    <div class="card-content-grid">
+                                        <div class="detail-card">
+                                            <div class="detail-icon">
+                                                <i class="pi pi-wallet"></i>
+                                            </div>
+                                            <div class="detail-content">
+                                                <label class="detail-label">Wallet/Entity</label>
+                                                <div class="detail-value">{{ caseData?.customer }}</div>
+                                            </div>
+                                            <Button 
+                                                icon="pi pi-copy"
+                                                severity="secondary"
+                                                text
+                                                rounded
+                                                size="small"
+                                                @click="copyToClipboard(caseData?.customer)"
+                                                v-tooltip.top="'Copy'" />
+                                        </div>
+                                        
+                                        <div class="detail-card">
+                                            <div class="detail-icon">
+                                                <i class="pi pi-hashtag"></i>
+                                            </div>
+                                            <div class="detail-content">
+                                                <label class="detail-label">Transaction Hash</label>
+                                                <div class="detail-value hash-truncated">0x1234567890abcdef...</div>
+                                            </div>
+                                            <Button 
+                                                icon="pi pi-copy"
+                                                severity="secondary"
+                                                text
+                                                rounded
+                                                size="small"
+                                                @click="copyToClipboard('0x1234567890abcdef')"
+                                                v-tooltip.top="'Copy Full Hash'" />
+                                        </div>
+                                        
+                                        <div class="detail-card">
+                                            <div class="detail-icon">
+                                                <i class="pi pi-send"></i>
+                                            </div>
+                                            <div class="detail-content">
+                                                <label class="detail-label">From Address</label>
+                                                <div class="detail-value hash-truncated">0xabcd1234...</div>
+                                            </div>
+                                            <Button 
+                                                icon="pi pi-external-link"
+                                                severity="secondary"
+                                                text
+                                                rounded
+                                                size="small"
+                                                v-tooltip.top="'View Address'" />
+                                        </div>
+                                        
+                                        <div class="detail-card">
+                                            <div class="detail-icon">
+                                                <i class="pi pi-download"></i>
+                                            </div>
+                                            <div class="detail-content">
+                                                <label class="detail-label">To Address</label>
+                                                <div class="detail-value hash-truncated">0xefgh5678...</div>
+                                            </div>
+                                            <Button 
+                                                icon="pi pi-external-link"
+                                                severity="secondary"
+                                                text
+                                                rounded
+                                                size="small"
+                                                v-tooltip.top="'View Address'" />
                                         </div>
                                     </div>
-                                    <div class="detail-group">
-                                        <div class="detail-item">
-                                            <label>From Address</label>
-                                            <div class="detail-value hash-value">0xabcd1234...</div>
+                                </div>
+
+                                <!-- Risk Analysis Card -->
+                                <div class="info-card risk-analysis-card">
+                                    <div class="card-header-modern">
+                                        <div class="header-title">
+                                            <i class="pi pi-shield"></i>
+                                            <h3>Risk Analysis</h3>
                                         </div>
-                                        <div class="detail-item">
-                                            <label>To Address</label>
-                                            <div class="detail-value hash-value">0xefgh5678...</div>
+                                        <div class="risk-score">
+                                            <span class="score-label">Risk Score</span>
+                                            <div class="score-indicator high">8.5</div>
                                         </div>
                                     </div>
-                                    <div class="detail-item full-width">
-                                        <label>Risk Indicators</label>
-                                        <div class="risk-indicators">
-                                            <Chip 
-                                                v-for="tag in caseData?.details?.tags" 
-                                                :key="tag"
-                                                :label="tag"
-                                                class="risk-chip" />
+                                    
+                                    <div class="risk-indicators-modern">
+                                        <div class="risk-category">
+                                            <h4>Identified Risks</h4>
+                                            <div class="risk-chips">
+                                                <Chip 
+                                                    v-for="tag in caseData?.details?.tags" 
+                                                    :key="tag"
+                                                    :label="tag"
+                                                    class="modern-risk-chip" 
+                                                    icon="pi pi-exclamation-triangle" />
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="risk-breakdown">
+                                            <div class="risk-meter">
+                                                <div class="meter-item">
+                                                    <span class="meter-label">AML Risk</span>
+                                                    <div class="meter-bar">
+                                                        <div class="meter-fill high" style="width: 85%"></div>
+                                                    </div>
+                                                    <span class="meter-value">High</span>
+                                                </div>
+                                                <div class="meter-item">
+                                                    <span class="meter-label">Sanctions Check</span>
+                                                    <div class="meter-bar">
+                                                        <div class="meter-fill medium" style="width: 45%"></div>
+                                                    </div>
+                                                    <span class="meter-value">Medium</span>
+                                                </div>
+                                                <div class="meter-item">
+                                                    <span class="meter-label">PEP Screening</span>
+                                                    <div class="meter-bar">
+                                                        <div class="meter-fill low" style="width: 15%"></div>
+                                                    </div>
+                                                    <span class="meter-value">Low</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -540,12 +718,12 @@ const loadCaseData = () => {
     caseData.value = caseStore.getCaseById(caseId);
     
     if (!caseData.value) {
-        router.push('/monitoring/cases');
+        // router.push('/monitoring/cases');
     }
 };
 
 const goBack = () => {
-    router.push('/monitoring/cases');
+    // router.push('/monitoring/cases');
 };
 
 const escalateCase = async () => {
@@ -689,6 +867,40 @@ const getInitials = (name) => {
         : '?';
 };
 
+// New methods for enhanced UX
+const copyToClipboard = async (text) => {
+    try {
+        await navigator.clipboard.writeText(text);
+        // Show toast notification (you can implement this with PrimeVue Toast)
+        console.log('Copied to clipboard:', text);
+    } catch (err) {
+        console.error('Failed to copy:', err);
+    }
+};
+
+const exportCase = () => {
+    // Export case data as PDF or JSON
+    console.log('Exporting case:', caseData.value?.id);
+};
+
+const showMoreOptions = () => {
+    // Show additional options menu
+    console.log('Showing more options');
+};
+
+const getTimeElapsed = (date) => {
+    if (!date) return 'N/A';
+    const now = new Date();
+    const created = new Date(date);
+    const diffTime = Math.abs(now - created);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) return '1 day ago';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.ceil(diffDays / 7)} weeks ago`;
+    return `${Math.ceil(diffDays / 30)} months ago`;
+};
+
 const getLevelSeverity = (level) => {
     switch (level) {
         case 'L1': return 'info';
@@ -761,23 +973,365 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Container */
+/* Modern Container */
 .case-detail-container {
-    padding: 1rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%);
+    min-height: 100vh;
+    padding: 1.5rem;
+    color: #1e293b;
     max-width: 1400px;
     margin: 0 auto;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    min-height: 100vh;
 }
 
-/* Case Header */
-.case-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 20px;
-    padding: 2rem;
+/* Modern Header with Glass Effect */
+.modern-header {
+    position: relative;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 24px;
     margin-bottom: 2rem;
+    box-shadow: 
+        0 25px 50px -12px rgba(0, 0, 0, 0.1),
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.header-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%);
+    z-index: 0;
+}
+
+.header-content {
+    position: relative;
+    z-index: 1;
+    padding: 2rem;
+}
+
+/* Navigation */
+.nav-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.modern-back-btn {
+    background: rgba(59, 130, 246, 0.08) !important;
+    color: #3b82f6 !important;
+    border: 1px solid rgba(59, 130, 246, 0.15) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(10px);
+}
+
+.modern-back-btn:hover {
+    background: rgba(59, 130, 246, 0.15) !important;
+    transform: translateX(-2px);
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+}
+
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+.breadcrumb-item {
+    color: #64748b;
+    transition: color 0.2s;
+}
+
+.breadcrumb-item:hover {
+    color: #3b82f6;
+}
+
+.breadcrumb-separator {
+    font-size: 0.75rem;
+    color: #cbd5e1;
+}
+
+.breadcrumb-current {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+/* Case Meta Section */
+.case-meta-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    gap: 2rem;
+}
+
+.case-title-group {
+    flex: 1;
+}
+
+.modern-case-id {
+    font-size: 2.25rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 0.5rem 0;
+    letter-spacing: -0.025em;
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.case-subtitle {
+    font-size: 1rem;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.6;
+    max-width: 500px;
+}
+
+/* Status Pills */
+.status-pills {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-end;
+}
+
+.pill-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.pill-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    min-width: 40px;
+    text-align: right;
+}
+
+.modern-tag {
+    border-radius: 100px !important;
+    padding: 0.5rem 1rem !important;
+    font-weight: 600 !important;
+    font-size: 0.75rem !important;
+    letter-spacing: 0.05em !important;
+    text-transform: uppercase !important;
+    border: none !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Action Bar */
+.action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.action-group {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.action-btn {
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    padding: 0.625rem 1.25rem !important;
+    font-size: 0.875rem !important;
+    border: none !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+}
+
+.action-btn:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+.secondary-actions .p-button {
+    width: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    border-radius: 12px !important;
+    background: rgba(148, 163, 184, 0.08) !important;
+    border: 1px solid rgba(148, 163, 184, 0.15) !important;
+    color: #64748b !important;
+}
+
+.secondary-actions .p-button:hover {
+    background: rgba(148, 163, 184, 0.15) !important;
+    color: #475569 !important;
+}
+
+/* Metrics Grid */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.metric-card {
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 20px;
+    padding: 1.5rem;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+        0 20px 25px -5px rgba(0, 0, 0, 0.1),
+        0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.metric-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
     color: white;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.3);
+    flex-shrink: 0;
+}
+
+.analyst-avatar {
+    background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%) !important;
+}
+
+.metric-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.metric-value {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 0.25rem;
+    line-height: 1.3;
+}
+
+.metric-label {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Metric Indicators */
+.metric-trend {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.trend-icon {
+    font-size: 0.875rem;
+}
+
+.trend-icon.positive {
+    color: #10b981;
+}
+
+.metric-progress {
+    margin-top: 0.75rem;
+    height: 4px;
+    background: rgba(148, 163, 184, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.metric-status {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.metric-status.online {
+    background: #10b981;
+}
+
+.metric-urgency {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.urgency-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.urgency-indicator.medium {
+    background: #f59e0b;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 
 .case-header-content {

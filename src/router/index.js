@@ -42,25 +42,25 @@ const router = createRouter({
                     path: '/monitoring/cases',
                     name: 'case-management',
                     component: () => import('@/views/monitoring/CaseManagement.vue'),
-                    beforeEnter: requireRole(['l1_analyst', 'l2_analyst', 'admin'])
+                    beforeEnter: requireRole(['L1', 'L2', 'admin'])
                 },
                 {
                     path: '/monitoring/cases/:id',
                     name: 'case-detail',
                     component: () => import('@/views/monitoring/CaseDetail.vue'),
-                    beforeEnter: requireRole(['l1_analyst', 'l2_analyst', 'admin'])
+                    beforeEnter: requireRole(['L1', 'L2', 'admin'])
                 },
                 {
                     path: '/monitoring/rules',
                     name: 'rules',
                     component: () => import('@/views/monitoring/Rules.vue'),
-                    beforeEnter: requireRole(['l2_analyst', 'admin'])
+                    beforeEnter: requireRole(['L2', 'admin'])
                 },
                 {
                     path: '/monitoring/reports',
                     name: 'reports',
                     component: () => import('@/views/monitoring/ExecutiveReports.vue'),
-                    beforeEnter: requireRole(['l1_analyst', 'l2_analyst', 'admin'])
+                    beforeEnter: requireRole(['L1', 'L2', 'admin'])
                 },
                 {
                     path: '/uikit/panel',
@@ -128,6 +128,12 @@ const router = createRouter({
                     name: 'profile',
                     component: () => import('@/views/UserProfile.vue'),
                     beforeEnter: requireAuth
+                },
+                {
+                    path: '/exchanger/create-case',
+                    name: 'exchanger-create-case',
+                    component: () => import('@/views/exchanger/ExchangerCaseCreation.vue'),
+                    beforeEnter: requireRole(['Exchanger', 'admin'])
                 }
             ]
         },

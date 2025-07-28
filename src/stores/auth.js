@@ -16,8 +16,9 @@ export const useAuthStore = defineStore('auth', {
 
     getters: {
       isAdmin: (state) => state.role === 'admin',
-      isL1Analyst: (state) => state.role === 'l1_analyst',
-      isL2Analyst: (state) => state.role === 'l2_analyst',
+      isL1Analyst: (state) => state.role === 'L1',
+      isL2Analyst: (state) => state.role === 'L2',
+      isExchanger: (state) => state.role === 'Exchanger',
     
       hasPermission: (state) => (permission) => {
         return Array.isArray(state.permissions) && state.permissions.includes(permission)

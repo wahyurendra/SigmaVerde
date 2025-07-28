@@ -46,7 +46,7 @@ const filteredCases = computed(() => {
 });
 
 const viewCase = (caseId) => {
-    router.push(`/monitoring/cases/${caseId}`);
+    router.push(`/monitoring/detail/${caseId}`);
 };
 
 const escalateCase = async (case_) => {
