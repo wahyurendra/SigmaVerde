@@ -1,198 +1,189 @@
 <template>
     <div class="crypto-live-monitor">
-        <!-- Header with controls -->
-        <div class="flex flex-column sm:flex-row sm:justify-content-between sm:align-items-center mb-4">
-            <div class="flex align-items-center gap-3 mb-3 sm:mb-0">
-                <h5 class="text-900 font-semibold m-0">{{ title }}</h5>
-                <div class="flex align-items-center gap-2 surface-100 border-round px-3 py-2">
-                    <div class="border-circle w-2rem h-2rem bg-green-100 flex align-items-center justify-content-center">
-                        <i class="pi pi-circle-fill text-green-500 text-sm animation-pulse"></i>
-                    </div>
-                    <span class="text-sm font-medium text-700">{{ isConnected ? 'Connected' : 'Disconnected' }}</span>
+        <!-- Header with Controls -->
+        <div class="monitor-header">
+            <div class="header-left">
+                <h6 class="monitor-title">{{ title }}</h6>
+                <div v-if="showStats" class="stats-info">
+                    <span class="stat-item">{{ transactions.length }} transactions</span>
+                    <span class="stat-divider">•</span>
+                    <span class="stat-item flagged">{{ flaggedCount }} flagged</span>
                 </div>
             </div>
             
-            <div class="flex align-items-center gap-2">
-                <Dropdown v-if="showNetworkFilter" 
-                         v-model="selectedNetwork" 
-                         :options="networks" 
-                         optionLabel="name" 
-                         placeholder="All Networks"
-                         class="w-full sm:w-12rem" />
+            <div class="header-controls">
+                <div v-if="showNetworkFilter" class="network-filter">
+                    <Dropdown v-model="selectedNetwork" 
+                             :options="networkOptions" 
+                             optionLabel="name" 
+                             optionValue="code"
+                             placeholder="All Networks"
+                             class="network-dropdown" />
+                </div>
                 
-                <Button :icon="isPaused ? 'pi pi-play' : 'pi pi-pause'" 
-                       :class="['p-button-rounded p-button-text', {'text-primary': !isPaused, 'text-red-600': isPaused}]"
-                       v-tooltip.top="isPaused ? 'Resume Feed' : 'Pause Feed'"
-                       @click="togglePause" />
+                <Button :icon="isLive ? 'pi pi-pause' : 'pi pi-play'" 
+                       :class="['control-btn', 'live-toggle', {'live-active': isLive, 'live-paused': !isLive}]"
+                       v-tooltip.top="isLive ? 'Pause Feed' : 'Resume Feed'"
+                       @click="toggleLiveFeed" />
                 
                 <Button icon="pi pi-refresh" 
-                       class="p-button-rounded p-button-text"
-                       v-tooltip.top="'Refresh'"
-                       @click="refresh" />
-                
-                <Button v-if="showSettings"
-                       icon="pi pi-cog" 
-                       class="p-button-rounded p-button-text"
-                       v-tooltip.top="'Settings'"
-                       @click="$emit('settings')" />
+                       class="control-btn refresh-btn"
+                       v-tooltip.top="'Refresh Data'"
+                       :loading="loading"
+                       @click="refreshData" />
             </div>
         </div>
 
-        <!-- Connection Status Banner -->
-        <div v-if="!isConnected" class="p-3 mb-4 bg-red-50 border-round text-red-900 text-sm">
-            <i class="pi pi-exclamation-triangle mr-2"></i>
-            Connection lost. Attempting to reconnect...
-        </div>
-
-        <!-- Live Feed Container -->
-        <div class="live-feed-container" :style="{ height: feedHeight }">
-            <div v-if="loading" class="flex align-items-center justify-content-center h-full">
-                <ProgressSpinner size="50px" strokeWidth="4" />
-            </div>
-            
-            <div v-else-if="transactions.length === 0" class="flex align-items-center justify-content-center h-full text-500">
-                <div class="text-center">
-                    <i class="pi pi-inbox text-4xl mb-3"></i>
-                    <p class="m-0">No transactions to display</p>
+        <!-- Live Status Indicator -->
+        <div class="status-indicator">
+            <div class="status-content">
+                <div :class="['status-icon', {'status-live': isLive, 'status-paused': !isLive}]">
+                    <i :class="['pi pi-circle-fill', {'pulse-animation': isLive}]"></i>
                 </div>
+                <span class="status-text">
+                    {{ isLive ? 'Live Monitoring Active' : 'Monitoring Paused' }}
+                </span>
             </div>
             
-            <div v-else class="transaction-feed p-2">
+            <div class="last-updated">
+                Last updated: {{ lastUpdated }}
+            </div>
+        </div>
+
+        <!-- Transaction Feed -->
+        <div class="transaction-feed">
+            <!-- Loading State -->
+            <div v-if="loading && transactions.length === 0" class="empty-state">
+                <ProgressSpinner size="50px" strokeWidth="4" />
+                <p class="empty-message">Loading anomalous transactions...</p>
+            </div>
+            
+            <!-- Empty State -->
+            <div v-else-if="filteredTransactions.length === 0" class="empty-state">
+                <i class="pi pi-info-circle empty-icon"></i>
+                <p class="empty-message">No anomalous transactions found</p>
+                <p class="empty-submessage">Transactions will appear here when anomalies are detected</p>
+            </div>
+            
+            <!-- Transaction List -->
+            <div v-else class="transaction-list">
                 <TransitionGroup name="transaction" tag="div">
-                    <div v-for="transaction in visibleTransactions" 
-                         :key="transaction.id" 
-                         :class="['transaction-item surface-card shadow-1 border-round-xl mb-3', 
-                                 getTransactionClass(transaction)]"
+                    <div v-for="transaction in paginatedTransactions" 
+                         :key="transaction.id"
+                         :class="['transaction-item', getRiskClass(transaction.riskLevel)]"
                          @click="$emit('transaction-click', transaction)">
                         
-                        <!-- Transaction Header -->
-                        <div class="flex justify-content-between align-items-center p-3 pb-2">
-                            <div class="flex align-items-center gap-2">
-                                <Tag :value="transaction.network" 
-                                     severity="info" 
-                                     class="text-xs font-medium" />
-                                <Tag :value="transaction.riskLevel" 
-                                     :severity="getRiskSeverity(transaction.riskLevel)" 
-                                     class="text-xs font-medium" />
-                            </div>
-                            <span class="text-500 text-sm">{{ formatTime(transaction.timestamp) }}</span>
-                        </div>
+                        <!-- Risk Indicator Bar -->
+                        <div :class="['risk-bar', getRiskBarClass(transaction.riskLevel)]"></div>
                         
-                        <!-- Transaction Content -->
-                        <div class="px-3 pb-3">
-                            <div class="grid">
-                                <div class="col-12 md:col-6">
-                                    <div class="text-sm text-500 mb-1">From:</div>
-                                    <div class="font-mono text-sm surface-100 p-2 border-round">
-                                        {{ truncateAddress(transaction.from) }}
-                                    </div>
+                        <!-- Transaction Header -->
+                        <div class="transaction-header">
+                            <div class="transaction-main">
+                                <div :class="['transaction-icon', getRiskIconClass(transaction.riskLevel)]">
+                                    <i :class="['pi', getRiskIcon(transaction.riskLevel)]"></i>
                                 </div>
-                                <div class="col-12 md:col-6">
-                                    <div class="text-sm text-500 mb-1">To:</div>
-                                    <div class="font-mono text-sm surface-100 p-2 border-round">
-                                        {{ truncateAddress(transaction.to) }}
-                                    </div>
+                                <div class="transaction-info">
+                                    <div class="amount">{{ transaction.formattedAmount }}</div>
+                                    <div class="time">{{ transaction.timeAgo }}</div>
                                 </div>
                             </div>
                             
-                            <div class="flex flex-wrap align-items-center gap-4 mt-3">
-                                <div>
-                                    <span class="text-500 text-sm">Amount: </span>
-                                    <span class="font-medium text-900">${{ formatCurrency(transaction.amount) }}</span>
-                                </div>
-                                <div>
-                                    <span class="text-500 text-sm">Fee: </span>
-                                    <span class="text-700">${{ formatCurrency(transaction.fee) }}</span>
-                                </div>
-                                <div v-if="transaction.gasPrice">
-                                    <span class="text-500 text-sm">Gas: </span>
-                                    <span class="text-700">{{ transaction.gasPrice }} Gwei</span>
+                            <div class="transaction-meta">
+                                <Tag :value="transaction.riskLevel" 
+                                     :severity="getRiskSeverity(transaction.riskLevel)"
+                                     class="risk-tag" />
+                                <div class="value-info">
+                                    <div class="usd-value">${{ formatCurrency(transaction.amount * 2000) }}</div>
+                                    <div class="network">{{ transaction.network }}</div>
                                 </div>
                             </div>
-                            
-                            <!-- Suspicious Flags -->
-                            <div v-if="transaction.suspiciousFlags && transaction.suspiciousFlags.length > 0" class="mt-3">
-                                <div class="text-sm text-500 mb-2">Suspicious Indicators:</div>
-                                <div class="flex flex-wrap gap-2">
-                                    <Chip v-for="flag in transaction.suspiciousFlags" 
-                                          :key="flag" 
-                                          :label="flag" 
-                                          class="text-xs bg-red-50 text-red-900" />
+                        </div>
+
+                        <!-- Transaction Details -->
+                        <div class="transaction-details">
+                            <div class="address-row">
+                                <div class="address-item">
+                                    <span class="address-label">From</span>
+                                    <span class="address-value">{{ truncateAddress(transaction.from) }}</span>
+                                </div>
+                                <div class="address-arrow">
+                                    <i class="pi pi-arrow-right"></i>
+                                </div>
+                                <div class="address-item">
+                                    <span class="address-label">To</span>
+                                    <span class="address-value">{{ truncateAddress(transaction.to) }}</span>
                                 </div>
                             </div>
-                            
-                            <!-- Action Buttons -->
-                            <div v-if="showActions" class="flex justify-content-end gap-2 mt-3">
-                                <Button icon="pi pi-search" 
-                                       class="p-button-rounded p-button-text p-button-sm" 
-                                       v-tooltip.top="'Investigate'"
-                                       @click.stop="$emit('investigate', transaction)" />
-                                <Button icon="pi pi-flag" 
-                                       class="p-button-rounded p-button-text p-button-danger p-button-sm" 
-                                       v-tooltip.top="'Flag as Suspicious'"
-                                       @click.stop="$emit('flag', transaction)" />
-                                <Button icon="pi pi-external-link" 
-                                       class="p-button-rounded p-button-text p-button-sm" 
-                                       v-tooltip.top="'View on Explorer'"
-                                       @click.stop="openExplorer(transaction)" />
+                        </div>
+
+                        <!-- Suspicious Flags -->
+                        <div v-if="transaction.suspiciousFlags.length > 0" class="suspicious-flags">
+                            <div class="flags-container">
+                                <Chip v-for="flag in transaction.suspiciousFlags.slice(0, 3)" 
+                                      :key="flag"
+                                      :label="flag"
+                                      class="flag-chip" />
+                                <Chip v-if="transaction.suspiciousFlags.length > 3"
+                                      :label="`+${transaction.suspiciousFlags.length - 3} more`"
+                                      class="flag-chip more-flags" />
                             </div>
+                        </div>
+
+                        <!-- Detection Info -->
+                        <div class="detection-info">
+                            <div class="detection-content">
+                                <span class="detection-reason">{{ transaction.reason }}</span>
+                                <span class="detection-source">{{ transaction.detector }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div v-if="showActions" class="transaction-actions">
+                            <Button label="Investigate" 
+                                   icon="pi pi-search"
+                                   size="small"
+                                   severity="secondary"
+                                   class="action-btn investigate-btn"
+                                   @click.stop="$emit('investigate', transaction)" />
+                            <Button label="Flag" 
+                                   icon="pi pi-flag"
+                                   size="small"
+                                   severity="warning"
+                                   class="action-btn flag-btn"
+                                   @click.stop="$emit('flag', transaction)" />
                         </div>
                     </div>
                 </TransitionGroup>
             </div>
-        </div>
 
-        <!-- Footer with stats -->
-        <div v-if="showStats" class="flex justify-content-between align-items-center mt-3 pt-3 border-top-1 surface-border">
-            <div class="flex gap-4">
-                <div class="text-center">
-                    <div class="text-lg font-bold text-900">{{ totalTransactions }}</div>
-                    <div class="text-xs text-500">Total</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-lg font-bold text-red-500">{{ suspiciousCount }}</div>
-                    <div class="text-xs text-500">Suspicious</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-lg font-bold text-green-500">{{ averageTime }}ms</div>
-                    <div class="text-xs text-500">Avg Time</div>
-                </div>
-            </div>
-            
-            <div class="text-sm text-500">
-                Last update: {{ lastUpdateTime }}
+            <!-- Pagination -->
+            <div v-if="totalPages > 1" class="pagination-container">
+                <Paginator v-model:first="first" 
+                          :rows="rowsPerPage" 
+                          :totalRecords="filteredTransactions.length"
+                          :rowsPerPageOptions="[10, 20, 50]"
+                          template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+                          class="custom-paginator" />
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { useCryptoMonitoring } from '@/composables/useCryptoMonitoring';
-import { getExplorerUrl } from '@/utils/CryptoUtils';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { anomalousTransactionsService } from '@/services/AnomalousTransactionsService';
 import Button from 'primevue/button';
 import Chip from 'primevue/chip';
 import Dropdown from 'primevue/dropdown';
+import Paginator from 'primevue/paginator';
 import ProgressSpinner from 'primevue/progressspinner';
 import Tag from 'primevue/tag';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 // Props
 const props = defineProps({
     title: {
         type: String,
-        default: 'Live Transaction Feed'
-    },
-    feedHeight: {
-        type: String,
-        default: '600px'
-    },
-    maxTransactions: {
-        type: Number,
-        default: 20
-    },
-    updateInterval: {
-        type: Number,
-        default: 3000
+        default: 'Live Transaction Monitor'
     },
     showNetworkFilter: {
         type: Boolean,
@@ -206,362 +197,924 @@ const props = defineProps({
         type: Boolean,
         default: true
     },
-    showSettings: {
-        type: Boolean,
-        default: false
-    },
-    autoConnect: {
+    autoRefresh: {
         type: Boolean,
         default: true
+    },
+    refreshInterval: {
+        type: Number,
+        default: 30000 // 30 seconds
     }
 });
 
 // Emits
-const emit = defineEmits([
-    'transaction-click',
-    'investigate',
-    'flag',
-    'settings',
-    'connection-change'
+const emit = defineEmits(['transaction-click', 'investigate', 'flag']);
+
+// Reactive state
+const transactions = ref([]);
+const loading = ref(false);
+const isLive = ref(true);
+const selectedNetwork = ref(null);
+const lastUpdated = ref('Never');
+const first = ref(0);
+const rowsPerPage = ref(10);
+
+// Auto-refresh interval
+let refreshIntervalId = null;
+let unsubscribeUpdates = null;
+
+// Network options
+const networkOptions = ref([
+    { name: 'All Networks', code: null },
+    { name: 'Ethereum', code: 'Ethereum' },
+    { name: 'Bitcoin', code: 'Bitcoin' },
+    { name: 'Polygon', code: 'Polygon' }
 ]);
 
-// Composables
-const {
-    networks,
-    liveTransactions,
-    selectedNetwork,
-    isPaused,
-    togglePause,
-    getTransactionClass,
-    getRiskSeverity,
-    truncateAddress,
-    formatCurrency,
-    formatTime
-} = useCryptoMonitoring();
-
-// Local state
-const loading = ref(false);
-const isConnected = ref(false);
-const lastUpdateTime = ref('');
-const connectionInterval = ref(null);
-const updateInterval = ref(null);
-
 // Computed properties
-const transactions = computed(() => {
-    if (!selectedNetwork.value) return liveTransactions.value;
-    return liveTransactions.value.filter(tx => tx.network === selectedNetwork.value.code);
+const filteredTransactions = computed(() => {
+    let filtered = transactions.value;
+    
+    if (selectedNetwork.value) {
+        filtered = filtered.filter(tx => tx.network === selectedNetwork.value);
+    }
+    
+    return filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 });
 
-const visibleTransactions = computed(() => {
-    return transactions.value.slice(0, props.maxTransactions);
+const paginatedTransactions = computed(() => {
+    const start = first.value;
+    const end = start + rowsPerPage.value;
+    return filteredTransactions.value.slice(start, end);
 });
 
-const totalTransactions = computed(() => {
-    return transactions.value.length;
+const totalPages = computed(() => {
+    return Math.ceil(filteredTransactions.value.length / rowsPerPage.value);
 });
 
-const suspiciousCount = computed(() => {
-    return transactions.value.filter(tx => 
-        tx.riskLevel === 'HIGH' || tx.riskLevel === 'CRITICAL'
-    ).length;
-});
-
-const averageTime = computed(() => {
-    // Mock average processing time
-    return Math.floor(Math.random() * 100) + 50;
+const flaggedCount = computed(() => {
+    return transactions.value.filter(tx => tx.riskLevel === 'CRITICAL' || tx.riskLevel === 'HIGH').length;
 });
 
 // Methods
-const connect = async () => {
-    loading.value = true;
+const loadTransactions = async () => {
     try {
-        // Simulate connection delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        isConnected.value = true;
-        emit('connection-change', true);
-        startUpdates();
+        loading.value = true;
+        const data = await anomalousTransactionsService.getAnomalousTransactions();
+        transactions.value = data;
+        lastUpdated.value = new Date().toLocaleTimeString();
     } catch (error) {
-        console.error('Connection failed:', error);
-        isConnected.value = false;
-        emit('connection-change', false);
+        console.error('Failed to load transactions:', error);
     } finally {
         loading.value = false;
     }
 };
 
-const disconnect = () => {
-    isConnected.value = false;
-    stopUpdates();
-    emit('connection-change', false);
+const refreshData = async () => {
+    await loadTransactions();
 };
 
-const refresh = () => {
-    if (isConnected.value) {
-        updateLastUpdateTime();
-    } else {
-        connect();
-    }
-};
-
-const startUpdates = () => {
-    if (updateInterval.value) return;
+const toggleLiveFeed = () => {
+    isLive.value = !isLive.value;
     
-    updateInterval.value = setInterval(() => {
-        if (!isPaused.value && isConnected.value) {
-            updateLastUpdateTime();
+    if (isLive.value && props.autoRefresh) {
+        startAutoRefresh();
+    } else {
+        stopAutoRefresh();
+    }
+};
+
+const startAutoRefresh = () => {
+    if (refreshIntervalId) return;
+    
+    refreshIntervalId = setInterval(() => {
+        if (isLive.value) {
+            loadTransactions();
         }
-    }, props.updateInterval);
+    }, props.refreshInterval);
 };
 
-const stopUpdates = () => {
-    if (updateInterval.value) {
-        clearInterval(updateInterval.value);
-        updateInterval.value = null;
+const stopAutoRefresh = () => {
+    if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
     }
 };
 
-const updateLastUpdateTime = () => {
-    lastUpdateTime.value = new Date().toLocaleTimeString();
+const getRiskClass = (riskLevel) => {
+    return `risk-${riskLevel.toLowerCase()}`;
 };
 
-const openExplorer = (transaction) => {
-    const url = getExplorerUrl(transaction.network, 'transaction', transaction.hash);
-    if (url) {
-        window.open(url, '_blank');
+const getRiskBarClass = (riskLevel) => {
+    return `risk-bar-${riskLevel.toLowerCase()}`;
+};
+
+const getRiskIconClass = (riskLevel) => {
+    switch (riskLevel) {
+        case 'CRITICAL':
+            return 'icon-critical';
+        case 'HIGH':
+            return 'icon-high';
+        case 'MEDIUM':
+            return 'icon-medium';
+        default:
+            return 'icon-low';
     }
 };
 
-const simulateConnectionLoss = () => {
-    // Simulate random connection issues
-    if (Math.random() < 0.05) { // 5% chance
-        isConnected.value = false;
-        emit('connection-change', false);
-        
-        // Auto-reconnect after 2-5 seconds
-        setTimeout(() => {
-            if (props.autoConnect) {
-                connect();
-            }
-        }, Math.random() * 3000 + 2000);
+const getRiskIcon = (riskLevel) => {
+    switch (riskLevel) {
+        case 'CRITICAL':
+            return 'pi-exclamation-triangle';
+        case 'HIGH':
+            return 'pi-exclamation-circle';
+        case 'MEDIUM':
+            return 'pi-info-circle';
+        default:
+            return 'pi-check-circle';
     }
+};
+
+const getRiskSeverity = (riskLevel) => {
+    switch (riskLevel) {
+        case 'CRITICAL':
+            return 'danger';
+        case 'HIGH':
+            return 'warning';
+        case 'MEDIUM':
+            return 'info';
+        default:
+            return 'success';
+    }
+};
+
+const truncateAddress = (address) => {
+    if (!address) return '';
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+};
+
+const formatCurrency = (value) => {
+    return new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(value);
 };
 
 // Watchers
-watch(() => props.updateInterval, (newInterval) => {
-    if (updateInterval.value) {
-        stopUpdates();
-        startUpdates();
-    }
-});
-
-watch(isPaused, (paused) => {
-    if (paused) {
-        stopUpdates();
-    } else if (isConnected.value) {
-        startUpdates();
+watch(() => props.autoRefresh, (newVal) => {
+    if (newVal && isLive.value) {
+        startAutoRefresh();
+    } else {
+        stopAutoRefresh();
     }
 });
 
 // Lifecycle
-onMounted(() => {
-    if (props.autoConnect) {
-        connect();
+onMounted(async () => {
+    await loadTransactions();
+    
+    if (props.autoRefresh && isLive.value) {
+        startAutoRefresh();
     }
     
-    // Simulate occasional connection issues
-    connectionInterval.value = setInterval(simulateConnectionLoss, 30000);
-    updateLastUpdateTime();
+    // Subscribe to real-time updates
+    unsubscribeUpdates = anomalousTransactionsService.subscribeToTransactionUpdates((newTransactions) => {
+        if (isLive.value) {
+            transactions.value = newTransactions;
+            lastUpdated.value = new Date().toLocaleTimeString();
+        }
+    });
 });
 
 onUnmounted(() => {
-    stopUpdates();
-    if (connectionInterval.value) {
-        clearInterval(connectionInterval.value);
+    stopAutoRefresh();
+    if (unsubscribeUpdates) {
+        unsubscribeUpdates();
     }
-});
-
-// Expose methods for parent component
-defineExpose({
-    connect,
-    disconnect,
-    refresh,
-    isConnected: computed(() => isConnected.value),
-    transactionCount: computed(() => transactions.value.length)
 });
 </script>
 
 <style scoped>
 .crypto-live-monitor {
-    --monitor-border-radius: 0.75rem;
-    --monitor-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --primary-color: #10b981;
+    --danger-color: #ef4444;
+    --warning-color: #f59e0b;
+    --info-color: #3b82f6;
+    --success-color: #10b981;
+    --surface-color: #ffffff;
+    --surface-hover: #f8fafc;
+    --border-color: #e2e8f0;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --text-muted: #94a3b8;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.live-feed-container {
-    border: 1px solid var(--surface-border);
-    border-radius: var(--monitor-border-radius);
-    overflow: hidden;
-    background: var(--surface-ground);
+/* Header Styles */
+.monitor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
 }
 
-.transaction-feed {
-    height: 100%;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--surface-400) transparent;
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
 }
 
-.transaction-feed::-webkit-scrollbar {
-    width: 6px;
+.monitor-title {
+    color: var(--text-primary);
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0;
 }
 
-.transaction-feed::-webkit-scrollbar-track {
-    background: transparent;
+.stats-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
 }
 
-.transaction-feed::-webkit-scrollbar-thumb {
-    background: var(--surface-400);
-    border-radius: 3px;
+.stat-item {
+    font-weight: 500;
 }
 
-.transaction-item {
-    transition: all 0.3s ease;
-    cursor: pointer;
-    border-left: 4px solid transparent;
+.stat-item.flagged {
+    color: var(--warning-color);
+    font-weight: 600;
 }
 
-.transaction-item:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.stat-divider {
+    color: var(--text-muted);
 }
 
-/* Risk level styling */
-.low-risk {
-    border-left-color: var(--green-500);
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
 
-.medium-risk {
-    border-left-color: var(--yellow-500);
+.network-dropdown {
+    min-width: 10rem;
 }
 
-.high-risk {
-    border-left-color: var(--orange-500);
+.control-btn {
+    border-radius: 50%;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: none;
+    transition: var(--transition);
 }
 
-.critical-risk {
-    border-left-color: var(--red-500);
-    animation: pulse-border 2s infinite;
+.live-toggle.live-active {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: var(--success-color);
 }
 
-@keyframes pulse-border {
-    0%, 100% {
-        border-left-color: var(--red-500);
-    }
-    50% {
-        border-left-color: var(--red-300);
-    }
+.live-toggle.live-paused {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: var(--danger-color);
 }
 
-/* Animation for new transactions */
-.transaction-enter-active {
-    transition: all 0.5s ease;
+.refresh-btn {
+    background-color: rgba(59, 130, 246, 0.1);
+    color: var(--info-color);
 }
 
-.transaction-leave-active {
-    transition: all 0.3s ease;
+.control-btn:hover {
+    transform: scale(1.05);
+    box-shadow: var(--shadow-md);
 }
 
-.transaction-enter-from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
+/* Status Indicator */
+.status-indicator {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin-bottom: 1.5rem;
 }
 
-.transaction-leave-to {
-    opacity: 0;
-    transform: translateX(-20px) scale(0.95);
+.status-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
 
-.transaction-move {
-    transition: transform 0.3s ease;
+.status-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
 }
 
-/* Pulse animation for connection indicator */
-.animation-pulse {
-    animation: pulse 2s infinite;
+.status-icon.status-live {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: var(--success-color);
+}
+
+.status-icon.status-paused {
+    background-color: rgba(148, 163, 184, 0.1);
+    color: var(--text-muted);
+}
+
+.pulse-animation {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
+        transform: scale(1);
     }
     50% {
-        opacity: 0.5;
+        opacity: 0.7;
+        transform: scale(0.95);
     }
 }
 
-/* Responsive adjustments */
+.status-text {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.last-updated {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* Transaction Feed */
+.transaction-feed {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    text-align: center;
+}
+
+.empty-icon {
+    font-size: 3rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+
+.empty-message {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0.5rem 0;
+}
+
+.empty-submessage {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Transaction List */
+.transaction-list {
+    max-height: 600px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-muted) transparent;
+}
+
+.transaction-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.transaction-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.transaction-list::-webkit-scrollbar-thumb {
+    background-color: var(--text-muted);
+    border-radius: 3px;
+}
+
+/* Transaction Item */
+.transaction-item {
+    position: relative;
+    padding: 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: var(--transition);
+    background: var(--surface-color);
+}
+
+.transaction-item:last-child {
+    border-bottom: none;
+}
+
+.transaction-item:hover {
+    background: var(--surface-hover);
+    transform: translateX(4px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Risk Indicator Bar */
+.risk-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    transition: var(--transition);
+}
+
+.risk-bar-critical {
+    background: linear-gradient(180deg, var(--danger-color) 0%, #dc2626 100%);
+}
+
+.risk-bar-high {
+    background: linear-gradient(180deg, var(--warning-color) 0%, #d97706 100%);
+}
+
+.risk-bar-medium {
+    background: linear-gradient(180deg, var(--info-color) 0%, #2563eb 100%);
+}
+
+.risk-bar-low {
+    background: linear-gradient(180deg, var(--success-color) 0%, #059669 100%);
+}
+
+/* Transaction Header */
+.transaction-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.transaction-main {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.transaction-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.icon-critical {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger-color);
+}
+
+.icon-high {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning-color);
+}
+
+.icon-medium {
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--info-color);
+}
+
+.icon-low {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success-color);
+}
+
+.transaction-info .amount {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.transaction-info .time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.transaction-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: right;
+}
+
+.risk-tag {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.value-info .usd-value {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.value-info .network {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* Transaction Details */
+.transaction-details {
+    margin-bottom: 1rem;
+}
+
+.address-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: rgba(248, 250, 252, 0.5);
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.address-item {
+    flex: 1;
+    min-width: 0;
+}
+
+.address-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.address-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.address-arrow {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+/* Suspicious Flags */
+.suspicious-flags {
+    margin-bottom: 1rem;
+}
+
+.flags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.flag-chip {
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: rgba(245, 158, 11, 0.1);
+    color: #92400e;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.flag-chip.more-flags {
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--text-muted);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+/* Detection Info */
+.detection-info {
+    padding: 0.75rem;
+    background: rgba(59, 130, 246, 0.05);
+    border: 1px solid rgba(59, 130, 246, 0.1);
+    border-radius: var(--radius-sm);
+    margin-bottom: 1rem;
+}
+
+.detection-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+}
+
+.detection-reason {
+    color: var(--text-secondary);
+    flex: 1;
+}
+
+.detection-source {
+    color: var(--info-color);
+    font-weight: 600;
+}
+
+/* Action Buttons */
+.transaction-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.action-btn {
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+.investigate-btn:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: var(--info-color);
+}
+
+.flag-btn:hover {
+    background-color: rgba(245, 158, 11, 0.1);
+    border-color: var(--warning-color);
+}
+
+/* Pagination */
+.pagination-container {
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+    background: var(--surface-hover);
+}
+
+.custom-paginator {
+    justify-content: center;
+}
+
+/* Animations */
+.transaction-enter-active,
+.transaction-leave-active {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transaction-enter-from {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.95);
+}
+
+.transaction-leave-to {
+    opacity: 0;
+    transform: translateX(20px) scale(0.95);
+}
+
+.transaction-move {
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Responsive Design */
+@media screen and (max-width: 1024px) {
+    .monitor-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+    
+    .header-left,
+    .header-controls {
+        justify-content: center;
+    }
+    
+    .stats-info {
+        justify-content: center;
+    }
+}
+
 @media screen and (max-width: 768px) {
+    .crypto-live-monitor {
+        padding: 0.5rem;
+    }
+    
+    .monitor-header {
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    
+    .monitor-title {
+        font-size: 1rem;
+    }
+    
+    .stats-info {
+        font-size: 0.75rem;
+        flex-wrap: wrap;
+    }
+    
+    .header-controls {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+    
+    .network-dropdown {
+        min-width: 8rem;
+        font-size: 0.875rem;
+    }
+    
+    .control-btn {
+        width: 2.25rem;
+        height: 2.25rem;
+    }
+    
+    .status-indicator {
+        padding: 0.75rem;
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+    
+    .status-content {
+        justify-content: center;
+    }
+    
     .transaction-item {
-        margin-bottom: 0.75rem;
+        padding: 1rem;
     }
     
-    .transaction-item .grid {
-        margin: 0;
+    .transaction-header {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: stretch;
     }
     
-    .transaction-item .col-12 {
-        padding: 0.25rem;
+    .transaction-main {
+        justify-content: flex-start;
+    }
+    
+    .transaction-meta {
+        justify-content: space-between;
+        text-align: left;
+    }
+    
+    .address-row {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .address-arrow {
+        transform: rotate(90deg);
+        align-self: center;
+    }
+    
+    .transaction-actions {
+        justify-content: stretch;
+    }
+    
+    .action-btn {
+        flex: 1;
+    }
+    
+    .transaction-list {
+        max-height: 500px;
     }
 }
 
-@media screen and (max-width: 576px) {
-    .live-feed-container {
-        border-radius: 0.5rem;
+@media screen and (max-width: 480px) {
+    .monitor-header {
+        padding: 0.5rem;
+    }
+    
+    .status-indicator {
+        padding: 0.5rem;
     }
     
     .transaction-item {
-        margin-bottom: 0.5rem;
+        padding: 0.75rem;
+    }
+    
+    .transaction-icon {
+        width: 2rem;
+        height: 2rem;
+        font-size: 0.75rem;
+    }
+    
+    .transaction-info .amount {
+        font-size: 0.875rem;
+    }
+    
+    .flags-container {
+        gap: 0.25rem;
+    }
+    
+    .flag-chip {
+        font-size: 0.625rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .detection-info {
+        padding: 0.5rem;
+    }
+    
+    .detection-content {
+        flex-direction: column;
+        gap: 0.25rem;
+        align-items: flex-start;
+    }
+    
+    .pagination-container {
+        padding: 0.75rem;
     }
 }
 
-/* Dark mode support */
+/* Dark Mode Support */
 @media (prefers-color-scheme: dark) {
-    .live-feed-container {
-        background: var(--surface-900);
-        border-color: var(--surface-700);
+    .crypto-live-monitor {
+        --surface-color: #1e293b;
+        --surface-hover: #334155;
+        --border-color: #475569;
+        --text-primary: #f8fafc;
+        --text-secondary: #cbd5e1;
+        --text-muted: #94a3b8;
+    }
+    
+    .monitor-header,
+    .transaction-feed {
+        background: var(--surface-color);
+        border-color: var(--border-color);
+    }
+    
+    .status-indicator {
+        background: linear-gradient(135deg, #334155 0%, #475569 100%);
+    }
+    
+    .address-row {
+        background: rgba(51, 65, 85, 0.5);
+        border-color: rgba(71, 85, 105, 0.5);
+    }
+    
+    .detection-info {
+        background: rgba(59, 130, 246, 0.1);
+        border-color: rgba(59, 130, 246, 0.2);
+    }
+    
+    .transaction-item:hover {
+        background: var(--surface-hover);
     }
 }
 
-/* High contrast mode */
+/* High Contrast Mode */
 @media (prefers-contrast: high) {
+    .crypto-live-monitor {
+        --border-color: #000000;
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    
     .transaction-item {
-        border-width: 2px;
-        border-style: solid;
+        border: 2px solid var(--border-color);
     }
     
-    .low-risk {
-        border-color: var(--green-600);
-    }
-    
-    .medium-risk {
-        border-color: var(--yellow-600);
-    }
-    
-    .high-risk {
-        border-color: var(--orange-600);
-    }
-    
-    .critical-risk {
-        border-color: var(--red-600);
+    .risk-bar {
+        width: 6px;
     }
 }
 
-/* Reduced motion */
+/* Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
-    .transaction-item,
-    .animation-pulse,
-    .critical-risk {
+    .crypto-live-monitor * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .pulse-animation {
         animation: none;
-        transition: none;
     }
     
     .transaction-enter-active,
@@ -571,72 +1124,133 @@ defineExpose({
     }
 }
 
-/* Focus states for accessibility */
-.transaction-item:focus {
+/* Print Styles */
+@media print {
+    .crypto-live-monitor {
+        background: white;
+        color: black;
+    }
+    
+    .header-controls,
+    .transaction-actions,
+    .pagination-container {
+        display: none;
+    }
+    
+    .transaction-item {
+        break-inside: avoid;
+        border: 1px solid #000;
+        margin-bottom: 0.5rem;
+    }
+    
+    .risk-bar {
+        background: #000 !important;
+    }
+}
+
+/* Focus Styles for Accessibility */
+.control-btn:focus,
+.transaction-item:focus,
+.action-btn:focus {
     outline: 2px solid var(--primary-color);
     outline-offset: 2px;
 }
 
-/* Loading state */
-.loading-overlay {
+/* Loading States */
+.control-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.transaction-item.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* Custom Scrollbar for Better UX */
+.transaction-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-muted) transparent;
+}
+
+.transaction-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.transaction-list::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}
+
+.transaction-list::-webkit-scrollbar-thumb {
+    background: var(--text-muted);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+.transaction-list::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+    background-clip: content-box;
+}
+
+/* Utility Classes */
+.sr-only {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255, 255, 255, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
-/* Connection status styling */
-.connection-status {
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
+/* Enhanced Visual Hierarchy */
+.risk-critical {
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1);
 }
 
-.connection-status.connected {
-    background: var(--green-50);
-    color: var(--green-900);
-    border: 1px solid var(--green-200);
+.risk-high {
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1);
 }
 
-.connection-status.disconnected {
-    background: var(--red-50);
-    color: var(--red-900);
-    border: 1px solid var(--red-200);
+.risk-medium {
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1);
 }
 
-/* Stats footer styling */
-.stats-footer {
-    background: var(--surface-50);
-    border-top: 1px solid var(--surface-200);
-    padding: 1rem;
+.risk-low {
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1);
 }
 
-/* Custom scrollbar for better UX */
-.transaction-feed {
-    scroll-behavior: smooth;
+/* Improved Typography */
+.transaction-info .amount,
+.address-value {
+    font-feature-settings: 'tnum' 1, 'kern' 1;
+    letter-spacing: -0.025em;
 }
 
-/* Hover effects for better interactivity */
-.transaction-item .p-button:hover {
+/* Enhanced Hover Effects */
+.transaction-item:hover .risk-bar {
+    width: 6px;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+}
+
+.transaction-item:hover .transaction-icon {
     transform: scale(1.05);
 }
 
-/* Chip styling improvements */
-:deep(.p-chip) {
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
+/* Status Indicator Enhancements */
+.status-live .pulse-animation {
+    filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4));
 }
 
-/* Tag styling improvements */
-:deep(.p-tag) {
-    font-size: 0.75rem;
-    font-weight: 500;
+/* Network Badge Styling */
+.network {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
 }
 </style>
+

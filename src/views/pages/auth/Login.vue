@@ -548,37 +548,6 @@ const handleMicrosoftLogin = () => {
               />
             </form>
 
-            <!-- Quick Login Buttons for Testing (remove in production) -->
-            <div class="mt-6 space-y-2">
-              <p class="text-xs text-center" :class="subtitleClasses">Quick Login (Development)</p>
-              <div class="flex gap-2">
-                <Button
-                  @click="quickLogin('admin')"
-                  label="Admin"
-                  size="small"
-                  severity="secondary"
-                  class="flex-1"
-                  :disabled="loading"
-                />
-                <Button
-                  @click="quickLogin('l1_analyst')"
-                  label="L1"
-                  size="small"
-                  severity="secondary"
-                  class="flex-1"
-                  :disabled="loading"
-                />
-                <Button
-                  @click="quickLogin('l2_analyst')"
-                  label="L2"
-                  size="small"
-                  severity="secondary"
-                  class="flex-1"
-                  :disabled="loading"
-                />
-              </div>
-            </div>
-
             <!-- Divider -->
             <div class="relative my-6">
               <div class="absolute inset-0 flex items-center">
